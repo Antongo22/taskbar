@@ -130,6 +130,25 @@ internal static class TaskbarManager
         Console.WriteLine("✅ Панель задач показана.");
     }
 
+    public static void ApplyConfig(Config config)
+    {
+        if (config.TaskbarVisible)
+            ShowTaskbar();
+        else
+            HideTaskbar();
+
+        SetTransparency(config.Transparency);
+
+        // При изменении автоскрытия не перезапускаем explorer, оставим это на пользователя
+        SetAutoHide(config.AutoHide, restartExplorer: false);
+
+        Console.WriteLine("✅ Конфигурация применена (перезапуск Explorer.exe для автоскрытия может потребоваться).");
+    }
+
+
+    
+
+
     private static IntPtr GetTaskbarHandle() =>
         FindWindow(TASKBAR_WINDOW_CLASS, null);
 
