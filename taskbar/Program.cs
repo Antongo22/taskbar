@@ -9,6 +9,8 @@ internal class Program
         Console.Title = "Taskbar Manager";
         Console.ForegroundColor = ConsoleColor.Cyan;
 
+        bool autoHideChanged = false;
+
         while (true)
         {
             Console.Clear();
@@ -17,8 +19,9 @@ internal class Program
             Console.WriteLine("2. Отключить прозрачность");
             Console.WriteLine("3. Скрыть панель задач");
             Console.WriteLine("4. Показать панель задач");
-            Console.WriteLine("5. Свернуть панель задач");
-            Console.WriteLine("6. Развернуть панель задач");
+            Console.WriteLine("5. Включить автоскрытие панели задач");
+            Console.WriteLine("6. Отключить автоскрытие панели задач");
+            Console.WriteLine("7. Перезапустить Проводник (Explorer.exe) (Нужно для преминения 5 и 6 команд)");
             Console.WriteLine("0. Выход");
             Console.Write("\nВыберите действие: ");
 
@@ -39,13 +42,26 @@ internal class Program
                     TaskbarManager.ShowTaskbar();
                     break;
                 case "5":
-                    TaskbarManager.SetAutoHide(true);
-                    Pause();
+                    TaskbarManager.SetAutoHide(true, restartExplorer: false);
+                    autoHideChanged = true;
+                    Console.WriteLine("✅ Автоскрытие включено (требуется рестарт проводника).");
                     break;
                 case "6":
-                    TaskbarManager.SetAutoHide(false);
+                    TaskbarManager.SetAutoHide(false, restartExplorer: false);
+                    autoHideChanged = true;
+                    Console.WriteLine("✅ Автоскрытие отключено (требуется рестарт проводника).");
+                    break;
+                case "7":
+                    TaskbarManager.RestartExplorer();
+                    autoHideChanged = false;
+                    Console.WriteLine("✅ Проводник перезапущен.");
                     break;
                 case "0":
+                    if (autoHideChanged)
+                    {
+                        Console.WriteLine("⚠️ Изменения автоскрытия требуют перезапуска Проводника.");
+                        Console.WriteLine("Вы можете сделать это выбрав пункт 7.");
+                    }
                     Console.WriteLine("Выход...");
                     return;
                 default:
@@ -62,6 +78,6 @@ internal class Program
     static void Pause()
     {
         Console.WriteLine("\nНажмите любую клавишу для продолжения...");
-        Console.ReadKey();
+        Console.ReadKey(intercept: true);
     }
 }
