@@ -6,130 +6,15 @@ using Microsoft.Win32;
 namespace taskbar;
 
 /// <summary>
-/// Менеджер панели задач: прозрачность, отображение, автоскрытие и управление проводником.
+/// Управление состоянием панели задач.
 /// </summary>
-internal static class TaskbarManager
+public static class TaskbarManager
 {
-    private const string TASKBAR_WINDOW_CLASS = "Shell_TrayWnd";
-    private const string REG_PATH = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3";
+    private const string TASKBAR_CLASS = "Shell_TrayWnd";
+    private const string REG_PATH = @"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StuckRects3";
     private const string REG_VALUE = "Settings";
 
-    /// <summary>
-    /// Включает или отключает автоскрытие панели задач.
-    /// </summary>
-    /// <param name="enable">true — включить автоскрытие, false — отключить.</param>
-    /// <param name="restartExplorer">
-    /// true — после изменения настройки сразу перезапустить проводник (explorer.exe),
-    /// false — не перезапускать (рекомендуется вызывать RestartExplorer вручную).
-    /// </param>
-    public static void SetAutoHide(bool enable, bool restartExplorer = true)
-    {
-        try
-        {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(REG_PATH, writable: true);
-            if (key == null)
-            {
-                Console.WriteLine("❌ Не удалось открыть ключ реестра.");
-                return;
-            }
-
-            byte[] settings = (byte[])key.GetValue(REG_VALUE)!;
-
-            if (enable)
-                settings[8] |= 0x01;  // Установить бит автоскрытия
-            else
-                settings[8] &= unchecked((byte)~0x01); // Сбросить бит автоскрытия
-
-            key.SetValue(REG_VALUE, settings, RegistryValueKind.Binary);
-
-            if (restartExplorer)
-            {
-                RestartExplorer();
-                Console.WriteLine(enable ? "✅ Автоскрытие включено." : "✅ Автоскрытие отключено.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"❌ Ошибка при изменении автоскрытия: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Перезапускает процесс Проводника Windows (explorer.exe),
-    /// чтобы применить изменения в настройках панели задач.
-    /// </summary>
-    public static void RestartExplorer()
-    {
-        try
-        {
-            foreach (var process in Process.GetProcessesByName("explorer"))
-                process.Kill();
-
-            Process.Start("explorer.exe");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"❌ Ошибка при перезапуске Проводника: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Устанавливает прозрачность панели задач.
-    /// </summary>
-    /// <param name="alpha">Значение альфа-прозрачности от 0 (полностью прозрачная) до 255 (непрозрачная).</param>
-    public static void SetTransparency(byte alpha)
-    {
-        var handle = GetTaskbarHandle();
-        if (handle == IntPtr.Zero)
-        {
-            Console.WriteLine("❌ Панель задач не найдена.");
-            return;
-        }
-
-        uint style = GetWindowLong(handle, WinApiConstants.GWL_EXSTYLE);
-        SetWindowLong(handle, WinApiConstants.GWL_EXSTYLE, style | WinApiConstants.WS_EX_LAYERED);
-        SetLayeredWindowAttributes(handle, 0, alpha, WinApiConstants.LWA_ALPHA);
-
-        Console.WriteLine($"✅ Прозрачность панели задач установлена: {alpha}/255.");
-    }
-
-    /// <summary>
-    /// Сбрасывает прозрачность панели задач к полностью непрозрачному виду.
-    /// </summary>
-    public static void ResetTransparency()
-    {
-        var handle = GetTaskbarHandle();
-        if (handle == IntPtr.Zero)
-        {
-            Console.WriteLine("❌ Панель задач не найдена.");
-            return;
-        }
-
-        uint style = GetWindowLong(handle, WinApiConstants.GWL_EXSTYLE);
-        SetWindowLong(handle, WinApiConstants.GWL_EXSTYLE, style & ~WinApiConstants.WS_EX_LAYERED);
-        SetLayeredWindowAttributes(handle, 0, WinApiConstants.FULLY_OPAQUE, WinApiConstants.LWA_ALPHA);
-
-        Console.WriteLine("✅ Прозрачность панели задач сброшена.");
-    }
-
-    /// <summary>
-    /// Скрывает панель задач (полностью убирает с экрана).
-    /// </summary>
-    public static void HideTaskbar()
-    {
-        ShowWindow(GetTaskbarHandle(), WinApiConstants.SW_HIDE);
-        Console.WriteLine("✅ Панель задач скрыта.");
-    }
-
-    /// <summary>
-    /// Показывает панель задач, если она была скрыта.
-    /// </summary>
-    public static void ShowTaskbar()
-    {
-        ShowWindow(GetTaskbarHandle(), WinApiConstants.SW_SHOW);
-        Console.WriteLine("✅ Панель задач показана.");
-    }
-
+    /// <summary>Применяет конфигурацию к панели задач.</summary>
     public static void ApplyConfig(Config config)
     {
         if (config.TaskbarVisible)
@@ -139,20 +24,98 @@ internal static class TaskbarManager
 
         SetTransparency(config.Transparency);
 
-        // При изменении автоскрытия не перезапускаем explorer, оставим это на пользователя
-        SetAutoHide(config.AutoHide, restartExplorer: false);
+        // Проверим, нужно ли перезапускать Explorer
+        bool restartNeeded = SetAutoHide(config.AutoHide, restartExplorer: false);
 
-        Console.WriteLine("✅ Конфигурация применена (перезапуск Explorer.exe для автоскрытия может потребоваться).");
+        if (restartNeeded)
+        {
+            RestartExplorer();
+            Console.WriteLine("♻ Explorer перезапущен для применения автоскрытия.");
+        }
+        else
+        {
+            Console.WriteLine("✅ Конфигурация применена.");
+        }
     }
 
 
-    
+    public static bool SetAutoHide(bool enable, bool restartExplorer)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(REG_PATH, writable: true);
+            if (key == null)
+            {
+                Console.WriteLine("❌ Ошибка доступа к реестру.");
+                return false;
+            }
+
+            byte[] settings = (byte[])key.GetValue(REG_VALUE)!;
+
+            bool currentState = (settings[8] & 0x01) != 0;
+            if (currentState == enable)
+            {
+                return false; // Уже установлено нужное значение
+            }
+
+            if (enable)
+                settings[8] |= 0x01;
+            else
+                settings[8] &= unchecked((byte)~0x01);
+
+            key.SetValue(REG_VALUE, settings, RegistryValueKind.Binary);
+
+            if (restartExplorer)
+                RestartExplorer();
+
+            return true; // Изменение было
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка при изменении автоскрытия: {ex.Message}");
+            return false;
+        }
+    }
 
 
-    private static IntPtr GetTaskbarHandle() =>
-        FindWindow(TASKBAR_WINDOW_CLASS, null);
+    public static void RestartExplorer()
+    {
+        foreach (var p in Process.GetProcessesByName("explorer"))
+            p.Kill();
 
-    // WinAPI импорты
+        Process.Start("explorer.exe");
+    }
+
+    public static void SetTransparency(byte alpha)
+    {
+        var hWnd = FindWindow(TASKBAR_CLASS, null);
+        if (hWnd == IntPtr.Zero)
+        {
+            Console.WriteLine("❌ Панель задач не найдена.");
+            return;
+        }
+
+        uint styles = GetWindowLong(hWnd, WinApiConstants.GWL_EXSTYLE);
+        SetWindowLong(hWnd, WinApiConstants.GWL_EXSTYLE, styles | WinApiConstants.WS_EX_LAYERED);
+
+        bool result = SetLayeredWindowAttributes(hWnd, 0, alpha, WinApiConstants.LWA_ALPHA);
+        if (!result)
+        {
+            Console.WriteLine("❌ Не удалось применить прозрачность.");
+        }
+        else
+        {
+            Console.WriteLine($"✅ Прозрачность установлена: {alpha}/255");
+        }
+    }
+
+
+    public static void HideTaskbar() =>
+        ShowWindow(FindWindow(TASKBAR_CLASS, null), WinApiConstants.SW_HIDE);
+
+    public static void ShowTaskbar() =>
+        ShowWindow(FindWindow(TASKBAR_CLASS, null), WinApiConstants.SW_SHOW);
+
     [DllImport("user32.dll")] private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
     [DllImport("user32.dll")] private static extern uint GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);

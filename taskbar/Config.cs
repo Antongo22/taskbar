@@ -2,68 +2,53 @@
 using System.IO;
 using System.Text.Json;
 
-namespace taskbar
+namespace taskbar;
+
+/// <summary>
+/// Конфигурация панели задач.
+/// </summary>
+public class Config
 {
-    /// <summary>
-    /// Делегат для событий изменения конфигурации.
-    /// </summary>
-    public delegate void ConfigChangedEventHandler(Config sender);
+    private const string FileName = "taskbar_config.json";
+
+    /// <summary>Прозрачность панели задач (0–255).</summary>
+    public byte Transparency { get; set; } = WinApiConstants.SEMI_TRANSPARENT;
+
+    /// <summary>Автоскрытие панели задач.</summary>
+    public bool AutoHide { get; set; } = false;
+
+    /// <summary>Видимость панели задач.</summary>
+    public bool TaskbarVisible { get; set; } = true;
 
     /// <summary>
-    /// Класс конфигурации настроек панели задач.
+    /// Загружает конфигурацию или создаёт дефолтную.
     /// </summary>
-    public class Config
+    public static Config LoadOrCreate()
     {
-        private const string ConfigFileName = "taskbar_config.json";
-
-        // Событие вызывается при изменении настроек
-        public event ConfigChangedEventHandler? OnConfigChanged;
-
-        // Параметры конфигурации
-        public byte Transparency { get; set; } = WinApiConstants.SEMI_TRANSPARENT;
-        public bool AutoHide { get; set; } = false;
-        public bool TaskbarVisible { get; set; } = true;
-
-        /// <summary>
-        /// Загружает конфигурацию из файла.
-        /// Если файл не найден, создаёт конфиг с дефолтными значениями.
-        /// </summary>
-        /// <returns>Загруженный или созданный конфиг</returns>
-        public static Config Load()
+        if (!File.Exists(FileName))
         {
-            if (!File.Exists(ConfigFileName))
-            {
-                var defaultConfig = new Config();
-                defaultConfig.Save();
-                return defaultConfig;
-            }
-
-            string json = File.ReadAllText(ConfigFileName);
-            return JsonSerializer.Deserialize<Config>(json) ?? new Config();
+            var defaultConfig = new Config();
+            defaultConfig.Save();
+            return defaultConfig;
         }
 
-        /// <summary>
-        /// Сохраняет текущую конфигурацию в файл.
-        /// </summary>
-        public void Save()
-        {
-            string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(ConfigFileName, json);
-        }
+        string json = File.ReadAllText(FileName);
+        return JsonSerializer.Deserialize<Config>(json) ?? new Config();
+    }
 
-        /// <summary>
-        /// Обновляет текущие параметры и вызывает событие изменения конфигурации.
-        /// </summary>
-        /// <param name="transparency">Прозрачность панели задач</param>
-        /// <param name="autoHide">Автоскрытие панели задач</param>
-        /// <param name="taskbarVisible">Видимость панели задач</param>
-        public void Update(byte transparency, bool autoHide, bool taskbarVisible)
-        {
-            Transparency = transparency;
-            AutoHide = autoHide;
-            TaskbarVisible = taskbarVisible;
+    /// <summary>Сохраняет конфигурацию в файл.</summary>
+    public void Save()
+    {
+        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(FileName, json);
+    }
 
-            OnConfigChanged?.Invoke(this);
-        }
+    /// <summary>Печатает описание конфигурации в консоль.</summary>
+    public void PrintInfo()
+    {
+        Console.WriteLine("\n=== Текущая конфигурация ===");
+        Console.WriteLine($"Прозрачность: {Transparency} (0 = прозрачно, 255 = непрозрачно)");
+        Console.WriteLine($"Автоскрытие: {(AutoHide ? "включено" : "отключено")}");
+        Console.WriteLine($"Видимость панели задач: {(TaskbarVisible ? "показана" : "скрыта")}");
     }
 }
